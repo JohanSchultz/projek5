@@ -15,11 +15,64 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([array], { type: mime });
 }
 
+async function getCameraStream() {
+  const constraints = [
+    { video: { facingMode: { ideal: "environment" } }, audio: false },
+    { video: { facingMode: "user" }, audio: false },
+    { video: true, audio: false },
+  ];
+
+  let lastError;
+
+  for (const constraint of constraints) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraint);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Could not access the camera.");
+}
+
+function waitForVideoFrame(video) {
+  return new Promise((resolve, reject) => {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+      resolve();
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Camera preview did not become ready in time."));
+    }, 10000);
+
+    const onReady = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("loadedmetadata", onReady);
+      video.removeEventListener("playing", onReady);
+    };
+
+    video.addEventListener("loadeddata", onReady);
+    video.addEventListener("loadedmetadata", onReady);
+    video.addEventListener("playing", onReady);
+  });
+}
+
 export default function PhotoCapture() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
   const [cameraActive, setCameraActive] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [filename, setFilename] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -31,10 +84,50 @@ export default function PhotoCapture() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!cameraActive || !streamRef.current || !videoRef.current) {
+      return undefined;
+    }
+
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    let cancelled = false;
+
+    async function attachStream() {
+      setVideoReady(false);
+      video.srcObject = stream;
+
+      try {
+        await video.play();
+        await waitForVideoFrame(video);
+        if (!cancelled) {
+          setVideoReady(true);
+        }
+      } catch (previewError) {
+        if (!cancelled) {
+          setError(
+            previewError instanceof Error
+              ? previewError.message
+              : "Could not start the camera preview."
+          );
+          stopCamera();
+        }
+      }
+    }
+
+    attachStream();
+
+    return () => {
+      cancelled = true;
+      video.srcObject = null;
+    };
+  }, [cameraActive]);
+
   async function startCamera() {
     setError(null);
     setCapturedPhoto(null);
     setFilename("");
+    setVideoReady(false);
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access is not supported on this device or browser.");
@@ -42,18 +135,8 @@ export default function PhotoCapture() {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-
+      const stream = await getCameraStream();
       streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
       setCameraActive(true);
     } catch (cameraError) {
       setError(
@@ -73,6 +156,7 @@ export default function PhotoCapture() {
     }
 
     setCameraActive(false);
+    setVideoReady(false);
   }
 
   async function uploadPhoto(dataUrl) {
@@ -95,7 +179,18 @@ export default function PhotoCapture() {
 
   async function capturePhoto() {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !videoReady) return;
+
+    try {
+      await waitForVideoFrame(video);
+    } catch (previewError) {
+      setError(
+        previewError instanceof Error
+          ? previewError.message
+          : "Camera preview is not ready yet."
+      );
+      return;
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -170,11 +265,17 @@ export default function PhotoCapture() {
             muted
             className="w-full rounded-lg border border-zinc-200 bg-black dark:border-zinc-800"
           />
+          {!videoReady ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Starting camera preview...
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={capturePhoto}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-zinc-900 px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              disabled={!videoReady}
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-zinc-900 px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
               Capture
             </button>
