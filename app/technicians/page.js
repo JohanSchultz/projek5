@@ -52,10 +52,10 @@ export default function TechniciansPage() {
             </p>
           </div>
           <Link
-            href="/"
+            href="/menu"
             className="text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
           >
-            ← Home
+            ← Menu
           </Link>
         </div>
 
