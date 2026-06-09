@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 function getNoteIdFromSession() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
   const stored = sessionStorage.getItem("notesPhotosContext");
 
   if (!stored) {
@@ -20,6 +24,10 @@ function getNoteIdFromSession() {
 }
 
 function getNoteId() {
+  if (typeof document === "undefined") {
+    return getNoteIdFromSession();
+  }
+
   const noteIdInput = document.getElementById("note_id");
   const noteIdFromInput = noteIdInput?.value?.trim() ?? "";
 
@@ -44,6 +52,10 @@ function dataUrlToBlob(dataUrl) {
 }
 
 function isMobileDevice() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
@@ -168,6 +180,7 @@ export default function PhotoCapture() {
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosError, setPhotosError] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [noteId, setNoteId] = useState("");
   const [useNativeCamera] = useState(() => isMobileDevice());
 
   async function loadPhotos() {
@@ -226,6 +239,8 @@ export default function PhotoCapture() {
   }
 
   useEffect(() => {
+    const resolvedNoteId = getNoteId();
+    setNoteId(resolvedNoteId);
     loadPhotos();
 
     return () => {
@@ -302,6 +317,7 @@ export default function PhotoCapture() {
     }
 
     await recordPhoto(noteId, result.filename);
+    setNoteId(noteId);
     await loadPhotos();
   }
 
@@ -547,7 +563,7 @@ export default function PhotoCapture() {
           </div>
         ) : null}
 
-        {!loadingPhotos && !photos.length && getNoteId() ? (
+        {!loadingPhotos && !photos.length && noteId ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             No photos found for this note.
           </p>
