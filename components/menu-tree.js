@@ -17,6 +17,7 @@ const MENU_TREE = [
     label: "Function",
     children: [
       { id: "repairs", label: "Repairs" },
+      { id: "issues", label: "Issues", href: "/issues" },
       { id: "assessment", label: "Assessment", href: "/photos" },
     ],
   },

@@ -1,6 +1,34 @@
 "use client";
 
+import { createClient } from "@/lib/supabase/client";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+
+function getNoteIdFromSession() {
+  const stored = sessionStorage.getItem("notesPhotosContext");
+
+  if (!stored) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    return parsed.noteId ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function getNoteId() {
+  const noteIdInput = document.getElementById("note_id");
+  const noteIdFromInput = noteIdInput?.value?.trim() ?? "";
+
+  if (noteIdFromInput) {
+    return noteIdFromInput;
+  }
+
+  return getNoteIdFromSession();
+}
 
 function dataUrlToBlob(dataUrl) {
   const [header, base64] = dataUrl.split(",");
@@ -15,12 +43,54 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([array], { type: mime });
 }
 
+function isMobileDevice() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function configureVideoElement(video) {
+  video.muted = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
+  video.setAttribute("muted", "true");
+  video.setAttribute("autoplay", "true");
+}
+
 async function getCameraStream() {
-  const constraints = [
-    { video: { facingMode: { ideal: "environment" } }, audio: false },
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoDevices = devices.filter((device) => device.kind === "videoinput");
+
+  const backCamera = videoDevices.find((device) =>
+    /back|rear|environment/i.test(device.label)
+  );
+  const frontCamera = videoDevices.find((device) =>
+    /front|user|selfie/i.test(device.label)
+  );
+
+  const constraints = [];
+
+  if (backCamera?.deviceId) {
+    constraints.push({
+      video: { deviceId: { exact: backCamera.deviceId } },
+      audio: false,
+    });
+  }
+
+  if (frontCamera?.deviceId) {
+    constraints.push({
+      video: { deviceId: { exact: frontCamera.deviceId } },
+      audio: false,
+    });
+  }
+
+  constraints.push(
+    { video: { facingMode: { exact: "environment" } }, audio: false },
+    { video: { facingMode: "environment" }, audio: false },
     { video: { facingMode: "user" }, audio: false },
-    { video: true, audio: false },
-  ];
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: true, audio: false }
+  );
 
   let lastError;
 
@@ -35,7 +105,7 @@ async function getCameraStream() {
   throw lastError ?? new Error("Could not access the camera.");
 }
 
-function waitForVideoFrame(video) {
+function waitForVideoFrame(video, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
       resolve();
@@ -45,7 +115,7 @@ function waitForVideoFrame(video) {
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error("Camera preview did not become ready in time."));
-    }, 10000);
+    }, timeoutMs);
 
     const onReady = () => {
       if (video.videoWidth > 0 && video.videoHeight > 0) {
@@ -67,8 +137,25 @@ function waitForVideoFrame(video) {
   });
 }
 
+async function attachStreamToVideo(video, stream) {
+  configureVideoElement(video);
+  video.srcObject = stream;
+  await video.play();
+  await waitForVideoFrame(video);
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read the selected photo."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function PhotoCapture() {
   const videoRef = useRef(null);
+  const fileInputRef = useRef(null);
   const streamRef = useRef(null);
 
   const [cameraActive, setCameraActive] = useState(false);
@@ -77,75 +164,92 @@ export default function PhotoCapture() {
   const [filename, setFilename] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [photos, setPhotos] = useState([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photosError, setPhotosError] = useState(null);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [useNativeCamera] = useState(() => isMobileDevice());
+
+  async function loadPhotos() {
+    const noteId = getNoteId();
+
+    if (!noteId) {
+      setPhotos([]);
+      setPhotosError(null);
+      return;
+    }
+
+    setLoadingPhotos(true);
+    setPhotosError(null);
+
+    try {
+      const supabase = createClient();
+      const { data, error: loadPhotosError } = await supabase.rpc(
+        "pr_photos_by_note_id_id",
+        { p_note_id: Number(noteId) }
+      );
+
+      if (loadPhotosError) {
+        throw loadPhotosError;
+      }
+
+      const photoRows = data ?? [];
+      const photosWithUrls = await Promise.all(
+        photoRows.map(async (row) => {
+          const { data: signedUrlData, error: signedUrlError } =
+            await supabase.storage
+              .from("issues")
+              .createSignedUrl(row.path, 3600);
+
+          if (signedUrlError || !signedUrlData?.signedUrl) {
+            return null;
+          }
+
+          return {
+            path: row.path,
+            url: signedUrlData.signedUrl,
+          };
+        })
+      );
+
+      setPhotos(photosWithUrls.filter(Boolean));
+    } catch (loadError) {
+      setPhotos([]);
+      setPhotosError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load photos for this note."
+      );
+    } finally {
+      setLoadingPhotos(false);
+    }
+  }
 
   useEffect(() => {
+    loadPhotos();
+
     return () => {
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
 
   useEffect(() => {
-    if (!cameraActive || !streamRef.current || !videoRef.current) {
-      return undefined;
-    }
-
-    const video = videoRef.current;
-    const stream = streamRef.current;
-    let cancelled = false;
-
-    async function attachStream() {
-      setVideoReady(false);
-      video.srcObject = stream;
-
-      try {
-        await video.play();
-        await waitForVideoFrame(video);
-        if (!cancelled) {
-          setVideoReady(true);
-        }
-      } catch (previewError) {
-        if (!cancelled) {
-          setError(
-            previewError instanceof Error
-              ? previewError.message
-              : "Could not start the camera preview."
-          );
-          stopCamera();
-        }
-      }
-    }
-
-    attachStream();
-
-    return () => {
-      cancelled = true;
-      video.srcObject = null;
-    };
-  }, [cameraActive]);
-
-  async function startCamera() {
-    setError(null);
-    setCapturedPhoto(null);
-    setFilename("");
-    setVideoReady(false);
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Camera access is not supported on this device or browser.");
+    if (!selectedPhoto) {
       return;
     }
 
-    try {
-      const stream = await getCameraStream();
-      streamRef.current = stream;
-      setCameraActive(true);
-    } catch (cameraError) {
-      setError(
-        cameraError instanceof Error
-          ? cameraError.message
-          : "Could not access the camera. Check permissions and try again."
-      );
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setSelectedPhoto(null);
+      }
     }
-  }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedPhoto]);
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -159,9 +263,26 @@ export default function PhotoCapture() {
     setVideoReady(false);
   }
 
+  async function recordPhoto(noteId, uploadedFilename) {
+    const supabase = createClient();
+    const { error: recordPhotoError } = await supabase.rpc("pi_photo", {
+      p_note_id: Number(noteId),
+      p_path: `${noteId}/${uploadedFilename}`,
+    });
+
+    if (recordPhotoError) {
+      throw recordPhotoError;
+    }
+  }
+
   async function uploadPhoto(dataUrl) {
+    const noteId = getNoteId();
     const formData = new FormData();
     formData.append("file", dataUrlToBlob(dataUrl), `photo-${Date.now()}.jpg`);
+
+    if (noteId) {
+      formData.append("noteId", noteId);
+    }
 
     const response = await fetch("/api/photos/upload", {
       method: "POST",
@@ -175,6 +296,100 @@ export default function PhotoCapture() {
     }
 
     setFilename(result.filename);
+
+    if (!noteId) {
+      throw new Error("No note was selected. Return to Notes and select a note first.");
+    }
+
+    await recordPhoto(noteId, result.filename);
+    await loadPhotos();
+  }
+
+  async function saveCapturedPhoto(dataUrl) {
+    setCapturedPhoto(dataUrl);
+    setUploading(true);
+    setError(null);
+    setFilename("");
+
+    try {
+      await uploadPhoto(dataUrl);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Could not upload the photo to Supabase storage."
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function openNativeCamera() {
+    setError(null);
+    setCapturedPhoto(null);
+    setFilename("");
+    fileInputRef.current?.click();
+  }
+
+  async function handleNativePhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      await saveCapturedPhoto(dataUrl);
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : "Could not process the selected photo."
+      );
+    }
+  }
+
+  async function startCamera() {
+    setError(null);
+    setCapturedPhoto(null);
+    setFilename("");
+    setVideoReady(false);
+
+    if (useNativeCamera) {
+      openNativeCamera();
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Camera access is not supported on this device or browser.");
+      return;
+    }
+
+    try {
+      const stream = await getCameraStream();
+      streamRef.current = stream;
+
+      flushSync(() => {
+        setCameraActive(true);
+      });
+
+      const video = videoRef.current;
+      if (!video) {
+        throw new Error("Camera preview could not be initialized.");
+      }
+
+      await attachStreamToVideo(video, stream);
+      setVideoReady(true);
+    } catch (cameraError) {
+      stopCamera();
+      setError(
+        cameraError instanceof Error
+          ? cameraError.message
+          : "Could not access the camera. Check permissions and try again."
+      );
+    }
   }
 
   async function capturePhoto() {
@@ -203,22 +418,7 @@ export default function PhotoCapture() {
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
 
     stopCamera();
-    setCapturedPhoto(dataUrl);
-    setUploading(true);
-    setError(null);
-    setFilename("");
-
-    try {
-      await uploadPhoto(dataUrl);
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Could not upload the photo to Supabase storage."
-      );
-    } finally {
-      setUploading(false);
-    }
+    await saveCapturedPhoto(dataUrl);
   }
 
   function resetPhoto() {
@@ -229,6 +429,15 @@ export default function PhotoCapture() {
 
   return (
     <div className="space-y-4">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleNativePhoto}
+      />
+
       <div>
         <label
           htmlFor="filename"
@@ -260,10 +469,7 @@ export default function PhotoCapture() {
         <div className="space-y-4">
           <video
             ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full rounded-lg border border-zinc-200 bg-black dark:border-zinc-800"
+            className="aspect-[4/3] w-full rounded-lg border border-zinc-200 bg-black object-cover dark:border-zinc-800"
           />
           {!videoReady ? (
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -300,7 +506,7 @@ export default function PhotoCapture() {
           />
           {uploading ? (
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Saving photo to issues/4...
+              Saving photo...
             </p>
           ) : null}
           <button
@@ -314,10 +520,80 @@ export default function PhotoCapture() {
         </div>
       ) : null}
 
+      <div>
+        {loadingPhotos ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Loading photos...
+          </p>
+        ) : null}
+
+        {!loadingPhotos && photos.length > 0 ? (
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            {photos.map((photo) => (
+              <button
+                key={photo.path}
+                type="button"
+                onClick={() => setSelectedPhoto(photo)}
+                className="cursor-pointer overflow-hidden rounded-lg border border-zinc-200 transition-opacity hover:opacity-80 dark:border-zinc-800"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.url}
+                  alt={photo.path}
+                  className="aspect-square w-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {!loadingPhotos && !photos.length && getNoteId() ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            No photos found for this note.
+          </p>
+        ) : null}
+
+        {photosError ? (
+          <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {photosError}
+          </p>
+        ) : null}
+      </div>
+
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
         </p>
+      ) : null}
+
+      {selectedPhoto ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setSelectedPhoto(null)}
+          role="presentation"
+        >
+          <div
+            className="relative max-h-full max-w-4xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Photo preview"
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute -top-10 right-0 text-sm font-medium text-white hover:text-zinc-300"
+            >
+              Close
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={selectedPhoto.url}
+              alt={selectedPhoto.path}
+              className="max-h-[85vh] w-full rounded-lg object-contain"
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );

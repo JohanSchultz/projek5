@@ -1,4 +1,5 @@
 import PhotoCapture from "./photo-capture";
+import PhotosContextFields from "./photos-context-fields";
 import Link from "next/link";
 
 export default function PhotosPage() {
@@ -14,14 +15,23 @@ export default function PhotosPage() {
               Assessment photo capture
             </p>
           </div>
-          <Link
-            href="/menu"
-            className="text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
-          >
-            ← Menu
-          </Link>
+          <div className="flex flex-col items-end gap-2">
+            <Link
+              href="/menu"
+              className="text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
+            >
+              ← Menu
+            </Link>
+            <Link
+              href="/notes"
+              className="text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
+            >
+              ← Notes
+            </Link>
+          </div>
         </div>
 
+        <PhotosContextFields />
         <PhotoCapture />
       </main>
     </div>

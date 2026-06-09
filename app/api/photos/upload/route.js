@@ -32,8 +32,11 @@ export async function POST(request) {
     return NextResponse.json({ error: "No photo file provided." }, { status: 400 });
   }
 
+  const noteId = formData.get("noteId");
+  const folder =
+    typeof noteId === "string" && noteId.trim() !== "" ? noteId.trim() : "4";
   const filename = `photo-${Date.now()}.jpg`;
-  const storagePath = `4/${filename}`;
+  const storagePath = `${folder}/${filename}`;
 
   const { error: uploadError } = await admin.storage
     .from("issues")
