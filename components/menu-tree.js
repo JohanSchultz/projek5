@@ -10,6 +10,7 @@ const MENU_TREE = [
     children: [
       { id: "buildings", label: "Buildings" },
       { id: "technicians", label: "Technicians", href: "/technicians" },
+      { id: "users", label: "Users", href: "/users" },
     ],
   },
   {
