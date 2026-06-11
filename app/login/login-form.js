@@ -11,13 +11,11 @@ export default function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event) {
     event.preventDefault();
     setLoading(true);
-    setError(null);
 
     const supabase = createClient();
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -26,8 +24,10 @@ export default function LoginForm() {
     });
 
     if (signInError) {
-      setError(signInError.message);
       setLoading(false);
+      router.push(
+        `/login/change-password?email=${encodeURIComponent(email)}`
+      );
       return;
     }
 
@@ -72,12 +72,6 @@ export default function LoginForm() {
           className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
       </div>
-
-      {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
 
       <button
         type="submit"
