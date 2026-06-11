@@ -1,4 +1,5 @@
 import ResetPasswordForm from "./reset-password-form";
+import { Suspense } from "react";
 
 export default function ResetPasswordPage() {
   return (
@@ -13,7 +14,15 @@ export default function ResetPasswordPage() {
           </p>
         </div>
 
-        <ResetPasswordForm />
+        <Suspense
+          fallback={
+            <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
+              Loading...
+            </p>
+          }
+        >
+          <ResetPasswordForm />
+        </Suspense>
       </main>
     </div>
   );
