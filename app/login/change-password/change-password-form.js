@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -22,8 +23,7 @@ export default function ChangePasswordForm() {
     setMessage(null);
 
     const supabase = createClient();
-    const nextPath = encodeURIComponent("/login/reset-password");
-    const redirectTo = `${window.location.origin}/auth/callback?next=${nextPath}`;
+    const redirectTo = getAuthCallbackUrl();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email,
       { redirectTo }
