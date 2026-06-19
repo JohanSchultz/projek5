@@ -51,8 +51,8 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([array], { type: mime });
 }
 
-const MAX_IMAGE_DIMENSION = 1920;
-const JPEG_QUALITY = 0.82;
+const MAX_IMAGE_DIMENSION = 1280;
+const JPEG_QUALITY = 0.75;
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -100,6 +100,25 @@ async function compressFile(file) {
 async function compressDataUrl(dataUrl) {
   const image = await loadImage(dataUrl);
   return compressImage(image);
+}
+
+async function parseUploadResponse(response) {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (response.status === 413 || /request entity too large/i.test(text)) {
+      throw new Error(
+        "Photo is too large to upload. Try taking the photo again closer to the subject."
+      );
+    }
+
+    throw new Error(
+      text.trim() ||
+        "Could not upload the photo. The server returned an unexpected response."
+    );
+  }
 }
 
 const readonlyTextareaClassName =
@@ -356,23 +375,23 @@ export default function PhotoCapture() {
       );
     }
 
-    const blob = dataUrlToBlob(dataUrl);
-    const uploadedFilename = `photo-${Date.now()}.jpg`;
-    const storagePath = `${noteId}/${uploadedFilename}`;
-    const supabase = createClient();
-    const { error: uploadError } = await supabase.storage
-      .from("issues")
-      .upload(storagePath, blob, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
+    const formData = new FormData();
+    formData.append("file", dataUrlToBlob(dataUrl), `photo-${Date.now()}.jpg`);
+    formData.append("noteId", noteId);
 
-    if (uploadError) {
-      throw new Error(`Storage upload failed: ${uploadError.message}`);
+    const response = await fetch("/api/photos/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await parseUploadResponse(response);
+
+    if (!response.ok) {
+      throw new Error(result.error ?? "Could not upload the photo.");
     }
 
-    setFilename(uploadedFilename);
-    await recordPhoto(noteId, uploadedFilename);
+    setFilename(result.filename);
+    await recordPhoto(noteId, result.filename);
     setNoteId(noteId);
     await loadPhotos();
   }
