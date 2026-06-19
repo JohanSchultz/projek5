@@ -51,6 +51,75 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([array], { type: mime });
 }
 
+const MAX_IMAGE_DIMENSION = 1920;
+const JPEG_QUALITY = 0.82;
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () =>
+      reject(new Error("Could not load the photo for compression."));
+    image.src = src;
+  });
+}
+
+function compressImage(image, maxDimension = MAX_IMAGE_DIMENSION) {
+  let targetWidth = image.width;
+  let targetHeight = image.height;
+
+  if (targetWidth > maxDimension || targetHeight > maxDimension) {
+    if (targetWidth >= targetHeight) {
+      targetWidth = maxDimension;
+      targetHeight = Math.round((image.height / image.width) * maxDimension);
+    } else {
+      targetHeight = maxDimension;
+      targetWidth = Math.round((image.width / image.height) * maxDimension);
+    }
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Could not prepare the photo for upload.");
+  }
+
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+  return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+}
+
+async function compressFile(file) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(dataUrl);
+  return compressImage(image);
+}
+
+async function compressDataUrl(dataUrl) {
+  const image = await loadImage(dataUrl);
+  return compressImage(image);
+}
+
+async function parseUploadResponse(response) {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (response.status === 413 || /request entity too large/i.test(text)) {
+      throw new Error(
+        "Photo is too large to upload. Try taking the photo again closer to the subject."
+      );
+    }
+
+    throw new Error(
+      text.trim() || "Could not upload the photo. The server returned an unexpected response."
+    );
+  }
+}
+
 function isMobileDevice() {
   if (typeof navigator === "undefined") {
     return false;
@@ -304,7 +373,7 @@ export default function PhotoCapture() {
       body: formData,
     });
 
-    const result = await response.json();
+    const result = await parseUploadResponse(response);
 
     if (!response.ok) {
       throw new Error(result.error ?? "Could not upload the photo.");
@@ -356,7 +425,7 @@ export default function PhotoCapture() {
     }
 
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await compressFile(file);
       await saveCapturedPhoto(dataUrl);
     } catch (photoError) {
       setError(
@@ -431,7 +500,9 @@ export default function PhotoCapture() {
     if (!context) return;
 
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const dataUrl = await compressDataUrl(
+      canvas.toDataURL("image/jpeg", JPEG_QUALITY)
+    );
 
     stopCamera();
     await saveCapturedPhoto(dataUrl);
