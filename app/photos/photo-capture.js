@@ -102,23 +102,11 @@ async function compressDataUrl(dataUrl) {
   return compressImage(image);
 }
 
-async function parseUploadResponse(response) {
-  const text = await response.text();
+const readonlyTextareaClassName =
+  "w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    if (response.status === 413 || /request entity too large/i.test(text)) {
-      throw new Error(
-        "Photo is too large to upload. Try taking the photo again closer to the subject."
-      );
-    }
-
-    throw new Error(
-      text.trim() || "Could not upload the photo. The server returned an unexpected response."
-    );
-  }
-}
+const errorTextareaClassName =
+  "w-full min-h-48 resize-y whitespace-pre-wrap break-words rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800";
 
 function isMobileDevice() {
   if (typeof navigator === "undefined") {
@@ -361,31 +349,30 @@ export default function PhotoCapture() {
 
   async function uploadPhoto(dataUrl) {
     const noteId = getNoteId();
-    const formData = new FormData();
-    formData.append("file", dataUrlToBlob(dataUrl), `photo-${Date.now()}.jpg`);
-
-    if (noteId) {
-      formData.append("noteId", noteId);
-    }
-
-    const response = await fetch("/api/photos/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    const result = await parseUploadResponse(response);
-
-    if (!response.ok) {
-      throw new Error(result.error ?? "Could not upload the photo.");
-    }
-
-    setFilename(result.filename);
 
     if (!noteId) {
-      throw new Error("No note was selected. Return to Notes and select a note first.");
+      throw new Error(
+        "No note was selected. Return to Notes and select a note first."
+      );
     }
 
-    await recordPhoto(noteId, result.filename);
+    const blob = dataUrlToBlob(dataUrl);
+    const uploadedFilename = `photo-${Date.now()}.jpg`;
+    const storagePath = `${noteId}/${uploadedFilename}`;
+    const supabase = createClient();
+    const { error: uploadError } = await supabase.storage
+      .from("issues")
+      .upload(storagePath, blob, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error(`Storage upload failed: ${uploadError.message}`);
+    }
+
+    setFilename(uploadedFilename);
+    await recordPhoto(noteId, uploadedFilename);
     setNoteId(noteId);
     await loadPhotos();
   }
@@ -399,11 +386,16 @@ export default function PhotoCapture() {
     try {
       await uploadPhoto(dataUrl);
     } catch (uploadError) {
-      setError(
+      const message =
         uploadError instanceof Error
           ? uploadError.message
-          : "Could not upload the photo to Supabase storage."
-      );
+          : typeof uploadError === "object" &&
+              uploadError !== null &&
+              "message" in uploadError
+            ? String(uploadError.message)
+            : "Could not upload the photo to Supabase storage.";
+
+      setError(message);
     } finally {
       setUploading(false);
     }
@@ -532,13 +524,13 @@ export default function PhotoCapture() {
         >
           filename
         </label>
-        <input
+        <textarea
           id="filename"
-          type="text"
           readOnly
+          rows={3}
           value={filename}
           placeholder={uploading ? "Uploading..." : "No photo saved yet"}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className={readonlyTextareaClassName}
         />
       </div>
 
@@ -641,16 +633,40 @@ export default function PhotoCapture() {
         ) : null}
 
         {photosError ? (
-          <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            {photosError}
-          </p>
+          <div className="mt-2">
+            <label
+              htmlFor="photos-error"
+              className="mb-1 block text-sm font-medium text-red-800"
+            >
+              Message
+            </label>
+            <textarea
+              id="photos-error"
+              readOnly
+              rows={8}
+              value={photosError}
+              className={errorTextareaClassName}
+            />
+          </div>
         ) : null}
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
+        <div>
+          <label
+            htmlFor="photo-error"
+            className="mb-1 block text-sm font-medium text-red-800"
+          >
+            Message
+          </label>
+          <textarea
+            id="photo-error"
+            readOnly
+            rows={8}
+            value={error}
+            className={errorTextareaClassName}
+          />
+        </div>
       ) : null}
 
       {selectedPhoto ? (
