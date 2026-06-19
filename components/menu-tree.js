@@ -59,7 +59,7 @@ function TreeNode({ node, depth = 0, expandedNodes, toggleNode, selectedId, onSe
         <button
           type="button"
           onClick={() => toggleNode(node.id)}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+          className="flex w-full items-center gap-2 rounded-lg bg-orange-100 px-3 py-2 text-left text-lg font-medium text-zinc-800 transition-colors hover:bg-orange-200 dark:text-zinc-900"
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
           aria-expanded={isExpanded}
         >
@@ -86,10 +86,10 @@ function TreeNode({ node, depth = 0, expandedNodes, toggleNode, selectedId, onSe
     );
   }
 
-  const className = `block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+  const className = `block w-full rounded-lg px-3 py-2 text-left text-base transition-colors ${
     isSelected
-      ? "bg-zinc-900 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-      : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+      ? "bg-yellow-200 font-medium text-zinc-900 ring-2 ring-orange-300"
+      : "bg-yellow-50 text-zinc-700 hover:bg-yellow-100 dark:text-zinc-800"
   }`;
 
   const style = { paddingLeft: `${depth * 16 + 36}px` };
