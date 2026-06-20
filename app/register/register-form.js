@@ -41,6 +41,7 @@ export default function RegisterForm() {
   const [voteError, setVoteError] = useState(null);
   const [voteMessage, setVoteMessage] = useState(null);
   const [votingTopicId, setVotingTopicId] = useState(null);
+  const [votedTopicIds, setVotedTopicIds] = useState({});
 
   async function loadMeetings(buildingId) {
     if (!buildingId || buildingId === "0") {
@@ -79,6 +80,7 @@ export default function RegisterForm() {
     if (meetingId === "0") {
       setTopics([]);
       setTopicVotes({});
+      setVotedTopicIds({});
       setTopicsError(null);
       return;
     }
@@ -98,9 +100,11 @@ export default function RegisterForm() {
 
       setTopics(data ?? []);
       setTopicVotes({});
+      setVotedTopicIds({});
     } catch (loadError) {
       setTopics([]);
       setTopicVotes({});
+      setVotedTopicIds({});
       setTopicsError(
         loadError instanceof Error
           ? loadError.message
@@ -156,6 +160,10 @@ export default function RegisterForm() {
       }
 
       setVoteMessage("Vote recorded successfully.");
+      setVotedTopicIds((current) => ({
+        ...current,
+        [topicId]: true,
+      }));
     } catch (voteSubmitError) {
       setVoteError(
         voteSubmitError instanceof Error
@@ -177,6 +185,7 @@ export default function RegisterForm() {
     setSelectedMeetingId("0");
     setTopics([]);
     setTopicVotes({});
+    setVotedTopicIds({});
     setTopicsError(null);
     setVoteError(null);
     setVoteMessage(null);
@@ -209,6 +218,7 @@ export default function RegisterForm() {
       setMeetings([]);
       setTopics([]);
       setTopicVotes({});
+      setVotedTopicIds({});
       setHasSearched(true);
       setSearchError(
         lookupError instanceof Error
@@ -325,6 +335,8 @@ export default function RegisterForm() {
             const topicId = getRowField(topicRow, "id") || String(index);
             const topicText = getRowField(topicRow, "topic_text");
             const selectedVote = topicVotes[topicId] ?? "";
+            const hasVoted = Boolean(votedTopicIds[topicId]);
+            const isVoting = votingTopicId === topicId;
 
             return (
               <fieldset
@@ -374,10 +386,14 @@ export default function RegisterForm() {
                   <button
                     type="button"
                     onClick={() => handleVote(topicId)}
-                    disabled={!selectedVote || votingTopicId === topicId}
-                    className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-blue-500/40 bg-blue-500/50 px-3 text-sm font-medium text-blue-950 transition-colors hover:bg-blue-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-400/30 dark:bg-blue-500/30 dark:text-blue-50 dark:hover:bg-blue-500/50"
+                    disabled={hasVoted || !selectedVote || isVoting}
+                    className={
+                      hasVoted
+                        ? "inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-blue-300 bg-blue-200 px-3 text-sm font-medium text-zinc-900 disabled:cursor-not-allowed disabled:opacity-100"
+                        : "inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-red-300 bg-red-100 px-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-300 dark:bg-red-100 dark:text-zinc-900 dark:hover:bg-red-200"
+                    }
                   >
-                    {votingTopicId === topicId ? "Voting..." : "Vote"}
+                    {isVoting ? "Voting..." : hasVoted ? "Voted" : "Not Voted"}
                   </button>
                 </div>
               </fieldset>

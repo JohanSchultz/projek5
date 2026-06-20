@@ -13,6 +13,7 @@ const KONSENSUS_TREE = [
       { id: "units", label: "Units", href: "/kons_units" },
       { id: "meetings", label: "Meetings", href: "/meetings" },
       { id: "voting-topics", label: "Voting topics", href: "/voting_topics" },
+      { id: "users", label: "Users", href: "/users" },
     ],
   },
   { id: "vote", label: "Vote", children: [{ id: "register", label: "Register", href: "/register" }] },

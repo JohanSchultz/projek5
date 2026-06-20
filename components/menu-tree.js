@@ -10,22 +10,17 @@ const MENU_TREE = [
     children: [
       { id: "buildings", label: "Buildings" },
       { id: "technicians", label: "Technicians", href: "/technicians" },
-      { id: "users", label: "Users", href: "/users" },
     ],
   },
   {
     id: "function",
     label: "Function",
-    children: [
-      { id: "repairs", label: "Repairs" },
-      { id: "issues", label: "Issues", href: "/issues" },
-      { id: "assessment", label: "Assessment", href: "/photos" },
-    ],
+    children: [{ id: "issues", label: "Issues", href: "/issues" }],
   },
   {
     id: "reports",
     label: "Reports",
-    children: [{ id: "problem-status", label: "Problem Status" }],
+    children: [{ id: "problem-status", label: "Issue Status", href: "/issue_status" }],
   },
 ];
 

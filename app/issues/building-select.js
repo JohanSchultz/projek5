@@ -18,19 +18,69 @@ function normalizeName(value) {
   return (value ?? "").trim();
 }
 
+function getStatusDescr(status) {
+  if (!status) {
+    return "";
+  }
+
+  return String(status.descr ?? "");
+}
+
+function isCompletedStatus(status) {
+  return normalizeName(getStatusDescr(status)).toLowerCase() === "completed";
+}
+
+function getDefaultStatusId(statuses) {
+  const reportedStatus = statuses.find(
+    (status) =>
+      normalizeName(getStatusDescr(status)).toLowerCase() === "reported"
+  );
+
+  if (reportedStatus) {
+    return String(reportedStatus.id);
+  }
+
+  return statuses[0] ? String(statuses[0].id) : "0";
+}
+
+function getSelectedStatus(statuses, selectedStatusId) {
+  return statuses.find((status) => String(status.id) === selectedStatusId);
+}
+
+function findStatusIdByLabel(statuses, statusText) {
+  const normalizedStatusText = normalizeName(statusText).toLowerCase();
+
+  if (!normalizedStatusText) {
+    return null;
+  }
+
+  const status = statuses.find((item) =>
+    [item.descr, item.name, item.status].some(
+      (value) => normalizeName(value).toLowerCase() === normalizedStatusText
+    )
+  );
+
+  return status ? String(status.id) : null;
+}
+
 const selectClassName =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
 const inputClassName =
   "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
-export default function BuildingSelect({ buildings, technicians, activeProblems }) {
+export default function BuildingSelect({ buildings, technicians, statuses, activeProblems }) {
   const router = useRouter();
   const [selectedBuildingId, setSelectedBuildingId] = useState("0");
   const [areas, setAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState("0");
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("0");
   const [estimatedHours, setEstimatedHours] = useState("");
+  const [selectedStatusId, setSelectedStatusId] = useState(() =>
+    getDefaultStatusId(statuses)
+  );
+  const [actualHours, setActualHours] = useState("");
+  const [actualResolveDate, setActualResolveDate] = useState("");
   const [estimatedResolveDate, setEstimatedResolveDate] = useState("");
   const [reportDate, setReportDate] = useState("");
   const [comments, setComments] = useState("");
@@ -100,12 +150,27 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
     setSelectedTechnicianId(event.target.value);
   }
 
+  function handleStatusChange(event) {
+    const statusId = event.target.value;
+    setSelectedStatusId(statusId);
+
+    const status = getSelectedStatus(statuses, statusId);
+
+    if (!isCompletedStatus(status)) {
+      setActualHours("");
+      setActualResolveDate("");
+    }
+  }
+
   function resetForm() {
     setSelectedBuildingId("0");
     setAreas([]);
     setSelectedAreaId("0");
     setSelectedTechnicianId("0");
     setEstimatedHours("");
+    setSelectedStatusId(getDefaultStatusId(statuses));
+    setActualHours("");
+    setActualResolveDate("");
     setEstimatedResolveDate("");
     setReportDate("");
     setComments("");
@@ -119,6 +184,9 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
     setSaveMessage(null);
     setSelectedGridProblemId(id);
     setLoadingProblem(true);
+
+    const gridProblem = problems.find((item) => item.id === id);
+    const statusIdFromGrid = findStatusIdByLabel(statuses, gridProblem?.status);
 
     try {
       const supabase = createClient();
@@ -161,6 +229,17 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
       setEstimatedHours(
         problem.estimated_hours == null ? "" : String(problem.estimated_hours)
       );
+      setSelectedStatusId(
+        statusIdFromGrid ??
+          findStatusIdByLabel(statuses, problem.status) ??
+          (problem.status_id == null
+            ? getDefaultStatusId(statuses)
+            : String(problem.status_id))
+      );
+      setActualHours(
+        problem.actual_hours == null ? "" : String(problem.actual_hours)
+      );
+      setActualResolveDate(problem.actual_resolve_date ?? "");
       setEstimatedResolveDate(problem.estimated_resolve_date ?? "");
       setReportDate(problem.report_date ?? "");
       setComments(problem.comments ?? "");
@@ -204,17 +283,39 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
     }
   }
 
-  function getProblemPayload() {
+  function getActualFieldParams(completedSelected) {
+    if (!completedSelected) {
+      return {
+        p_actual_resolve_date: null,
+        p_actual_hours: null,
+      };
+    }
+
+    return {
+      p_actual_resolve_date: actualResolveDate || null,
+      p_actual_hours: actualHours === "" ? null : Number(actualHours),
+    };
+  }
+
+  function getStatusIdForPayload() {
+    const selectedStatus = getSelectedStatus(statuses, selectedStatusId);
+
+    return Number(selectedStatus?.id ?? selectedStatusId);
+  }
+
+  function getProblemPayload({ isUpdate = false } = {}) {
+    const selectedStatus = getSelectedStatus(statuses, selectedStatusId);
+    const completedSelected = isCompletedStatus(selectedStatus);
+
     return {
       p_building_id: Number(selectedBuildingId),
       p_unit_id: Number(selectedAreaId),
-      p_report_date: getCurrentDate(),
+      p_report_date: isUpdate ? reportDate || getCurrentDate() : getCurrentDate(),
       p_estimated_resolve_date: estimatedResolveDate || null,
-      p_actual_resolve_date: null,
+      ...getActualFieldParams(completedSelected),
       p_estimated_hours:
         estimatedHours === "" ? null : Number(estimatedHours),
-      p_actual_hours: null,
-      p_status_id: 1,
+      p_status_id: getStatusIdForPayload(),
       p_technician_id: Number(selectedTechnicianId),
       p_comments: comments,
     };
@@ -235,6 +336,16 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
 
     if (selectedTechnicianId === "0") {
       return "Please select a technician.";
+    }
+
+    if (requireProblemId && isCompletedStatus(getSelectedStatus(statuses, selectedStatusId))) {
+      if (!actualResolveDate) {
+        return "Please enter an actual resolve date.";
+      }
+
+      if (actualHours === "") {
+        return "Please enter actual hours.";
+      }
     }
 
     return null;
@@ -315,10 +426,24 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
 
     setUpdating(true);
 
+    const selectedStatus = getSelectedStatus(statuses, selectedStatusId);
+    const completedSelected = isCompletedStatus(selectedStatus);
+    const actualFieldParams = getActualFieldParams(completedSelected);
+
     const supabase = createClient();
     const { error } = await supabase.rpc("pu_problem", {
       p_id: Number(problemId),
-      ...getProblemPayload(),
+      p_building_id: Number(selectedBuildingId),
+      p_unit_id: Number(selectedAreaId),
+      p_report_date: reportDate || getCurrentDate(),
+      p_estimated_resolve_date: estimatedResolveDate || null,
+      p_actual_resolve_date: actualFieldParams.p_actual_resolve_date,
+      p_estimated_hours:
+        estimatedHours === "" ? null : Number(estimatedHours),
+      p_actual_hours: actualFieldParams.p_actual_hours,
+      p_status_id: getStatusIdForPayload(),
+      p_technician_id: Number(selectedTechnicianId),
+      p_comments: comments,
     });
 
     if (error) {
@@ -344,6 +469,8 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
   }
 
   const isEditing = Boolean(problemId);
+  const selectedStatus = getSelectedStatus(statuses, selectedStatusId);
+  const showActualFields = isCompletedStatus(selectedStatus);
 
   return (
     <div className="space-y-4">
@@ -429,24 +556,48 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
         </select>
       </div>
 
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <label
-            htmlFor="estimatedHours"
-            className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Estimated Hours
-          </label>
-          <input
-            id="estimatedHours"
-            name="estimatedHours"
-            type="number"
-            min="0"
-            step="0.25"
-            value={estimatedHours}
-            onChange={(event) => setEstimatedHours(event.target.value)}
-            className={`${inputClassName} w-32`}
-          />
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="estimatedHours"
+              className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Estimated Hours
+            </label>
+            <input
+              id="estimatedHours"
+              name="estimatedHours"
+              type="number"
+              min="0"
+              step="0.25"
+              value={estimatedHours}
+              onChange={(event) => setEstimatedHours(event.target.value)}
+              className={`${inputClassName} w-32`}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="status"
+              className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Status
+            </label>
+            <select
+              id="status"
+              name="statusId"
+              value={selectedStatusId}
+              onChange={handleStatusChange}
+              className={`${selectClassName} w-48`}
+            >
+              {statuses.map((status) => (
+                <option key={status.id} value={status.id}>
+                  {getStatusDescr(status)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="text-right">
@@ -462,6 +613,47 @@ export default function BuildingSelect({ buildings, technicians, activeProblems 
             type="date"
             value={estimatedResolveDate}
             onChange={(event) => setEstimatedResolveDate(event.target.value)}
+            className={`${inputClassName} w-44`}
+          />
+        </div>
+      </div>
+
+      <div
+        className="flex items-end justify-between gap-4"
+        hidden={!showActualFields}
+      >
+        <div>
+          <label
+            htmlFor="actualHours"
+            className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Actual Hours
+          </label>
+          <input
+            id="actualHours"
+            name="actualHours"
+            type="number"
+            min="0"
+            step="0.25"
+            value={actualHours}
+            onChange={(event) => setActualHours(event.target.value)}
+            className={`${inputClassName} w-32`}
+          />
+        </div>
+
+        <div className="text-right">
+          <label
+            htmlFor="actualResolveDate"
+            className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Actual Resolve Date
+          </label>
+          <input
+            id="actualResolveDate"
+            name="actualResolveDate"
+            type="date"
+            value={actualResolveDate}
+            onChange={(event) => setActualResolveDate(event.target.value)}
             className={`${inputClassName} w-44`}
           />
         </div>

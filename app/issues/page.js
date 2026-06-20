@@ -5,10 +5,11 @@ import { Suspense } from "react";
 
 async function IssuesDropdowns() {
   const supabase = await createClient();
-  const [buildingsResult, techniciansResult, activeProblemsResult] =
+  const [buildingsResult, techniciansResult, statusesResult, activeProblemsResult] =
     await Promise.all([
       supabase.rpc("pr_buildings"),
       supabase.rpc("pr_technicians"),
+      supabase.rpc("pr_status"),
       supabase.rpc("pr_problems_active"),
     ]);
 
@@ -30,6 +31,15 @@ async function IssuesDropdowns() {
     );
   }
 
+  if (statusesResult.error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+        <p className="font-medium">Could not load statuses</p>
+        <p className="mt-1 text-sm">{statusesResult.error.message}</p>
+      </div>
+    );
+  }
+
   if (activeProblemsResult.error) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
@@ -45,12 +55,16 @@ async function IssuesDropdowns() {
   const technicians = [...(techniciansResult.data ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
   );
+  const statuses = [...(statusesResult.data ?? [])].sort(
+    (a, b) => Number(a.id) - Number(b.id)
+  );
   const activeProblems = activeProblemsResult.data ?? [];
 
   return (
     <BuildingSelect
       buildings={buildings}
       technicians={technicians}
+      statuses={statuses}
       activeProblems={activeProblems}
     />
   );
