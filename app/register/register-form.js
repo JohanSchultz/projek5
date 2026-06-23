@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const inputClassName =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
@@ -24,6 +24,8 @@ function getRowField(row, fieldName) {
 }
 
 export default function RegisterForm() {
+  const [buildings, setBuildings] = useState([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState("0");
   const [idNumber, setIdNumber] = useState("");
   const [voterId, setVoterId] = useState("");
   const [units, setUnits] = useState([]);
@@ -31,17 +33,44 @@ export default function RegisterForm() {
   const [selectedMeetingId, setSelectedMeetingId] = useState("0");
   const [topics, setTopics] = useState([]);
   const [topicVotes, setTopicVotes] = useState({});
+  const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState(null);
+  const [buildingsError, setBuildingsError] = useState(null);
   const [meetingsError, setMeetingsError] = useState(null);
   const [topicsError, setTopicsError] = useState(null);
   const [voteError, setVoteError] = useState(null);
   const [voteMessage, setVoteMessage] = useState(null);
   const [votingTopicId, setVotingTopicId] = useState(null);
   const [votedTopicIds, setVotedTopicIds] = useState({});
+
+  async function loadBuildings() {
+    setLoadingBuildings(true);
+    setBuildingsError(null);
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("pr_mbuildings");
+
+      if (error) {
+        throw error;
+      }
+
+      setBuildings(data ?? []);
+    } catch (loadError) {
+      setBuildings([]);
+      setBuildingsError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load buildings."
+      );
+    } finally {
+      setLoadingBuildings(false);
+    }
+  }
 
   async function loadMeetings(buildingId) {
     if (!buildingId || buildingId === "0") {
@@ -115,6 +144,23 @@ export default function RegisterForm() {
     }
   }
 
+  useEffect(() => {
+    loadBuildings();
+  }, []);
+
+  function handleBuildingChange(event) {
+    const buildingId = event.target.value;
+    setSelectedBuildingId(buildingId);
+    setSelectedMeetingId("0");
+    setTopics([]);
+    setTopicVotes({});
+    setVotedTopicIds({});
+    setTopicsError(null);
+    setVoteError(null);
+    setVoteMessage(null);
+    loadMeetings(buildingId);
+  }
+
   function handleMeetingChange(event) {
     const meetingId = event.target.value;
     setSelectedMeetingId(meetingId);
@@ -181,6 +227,7 @@ export default function RegisterForm() {
     setHasSearched(false);
     setVoterId("");
     setUnits([]);
+    setSelectedBuildingId("0");
     setMeetings([]);
     setSelectedMeetingId("0");
     setTopics([]);
@@ -208,7 +255,11 @@ export default function RegisterForm() {
       if (unitRows.length > 0) {
         setVoterId(getRowField(unitRows[0], "voter_id"));
         const buildingId = getRowField(unitRows[0], "building_id");
-        await loadMeetings(buildingId);
+
+        if (buildingId) {
+          setSelectedBuildingId(buildingId);
+          await loadMeetings(buildingId);
+        }
       } else {
         setVoterId("");
       }
@@ -240,6 +291,30 @@ export default function RegisterForm() {
         value={voterId}
         hidden
       />
+
+      <div>
+        <label
+          htmlFor="buildingName"
+          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Building Name
+        </label>
+        <select
+          id="buildingName"
+          name="buildingName"
+          value={selectedBuildingId}
+          onChange={handleBuildingChange}
+          disabled={loadingBuildings}
+          className={selectClassName}
+        >
+          <option value="0">- SELECT -</option>
+          {buildings.map((building) => (
+            <option key={building.id} value={building.id}>
+              {building.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div>
         <label
@@ -311,7 +386,7 @@ export default function RegisterForm() {
           name="meeting"
           value={selectedMeetingId}
           onChange={handleMeetingChange}
-          disabled={loadingMeetings || meetings.length === 0}
+          disabled={loadingMeetings || selectedBuildingId === "0"}
           className={selectClassName}
         >
           <option value="0">- SELECT -</option>
@@ -405,6 +480,12 @@ export default function RegisterForm() {
       {searchError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {searchError}
+        </p>
+      ) : null}
+
+      {buildingsError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {buildingsError}
         </p>
       ) : null}
 
