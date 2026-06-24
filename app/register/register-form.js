@@ -195,6 +195,28 @@ export default function RegisterForm() {
 
     try {
       const supabase = createClient();
+      const { data: isLocked, error: lockCheckError } = await supabase.rpc(
+        "pr_topics_is_locked",
+        {
+          p_id: Number(topicId),
+        }
+      );
+
+      if (lockCheckError) {
+        throw lockCheckError;
+      }
+
+      const topicIsLocked =
+        isLocked === true ||
+        isLocked === "true" ||
+        isLocked === 1 ||
+        isLocked === "1";
+
+      if (topicIsLocked) {
+        setVoteError("This Topic has been Locked");
+        return;
+      }
+
       const { error } = await supabase.rpc("piu_vote", {
         p_yes: vote === "yes",
         p_topic_id: Number(topicId),
@@ -227,7 +249,6 @@ export default function RegisterForm() {
     setHasSearched(false);
     setVoterId("");
     setUnits([]);
-    setSelectedBuildingId("0");
     setMeetings([]);
     setSelectedMeetingId("0");
     setTopics([]);
@@ -236,12 +257,19 @@ export default function RegisterForm() {
     setTopicsError(null);
     setVoteError(null);
     setVoteMessage(null);
+
+    if (selectedBuildingId === "0") {
+      setSearchError("Please select a building.");
+      return;
+    }
+
     setLoadingUnits(true);
 
     try {
       const supabase = createClient();
       const { data, error } = await supabase.rpc("pr_units_by_idno", {
         p_idnumber: idNumber,
+        p_building_id: Number(selectedBuildingId),
       });
 
       if (error) {
@@ -254,12 +282,7 @@ export default function RegisterForm() {
 
       if (unitRows.length > 0) {
         setVoterId(getRowField(unitRows[0], "voter_id"));
-        const buildingId = getRowField(unitRows[0], "building_id");
-
-        if (buildingId) {
-          setSelectedBuildingId(buildingId);
-          await loadMeetings(buildingId);
-        }
+        await loadMeetings(selectedBuildingId);
       } else {
         setVoterId("");
       }
@@ -461,10 +484,10 @@ export default function RegisterForm() {
                   <button
                     type="button"
                     onClick={() => handleVote(topicId)}
-                    disabled={hasVoted || !selectedVote || isVoting}
+                    disabled={!selectedVote || isVoting}
                     className={
                       hasVoted
-                        ? "inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-blue-300 bg-blue-200 px-3 text-sm font-medium text-zinc-900 disabled:cursor-not-allowed disabled:opacity-100"
+                        ? "inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-blue-300 bg-blue-200 px-3 text-sm font-medium text-zinc-900 transition-colors hover:bg-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
                         : "inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-red-300 bg-red-100 px-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-300 dark:bg-red-100 dark:text-zinc-900 dark:hover:bg-red-200"
                     }
                   >

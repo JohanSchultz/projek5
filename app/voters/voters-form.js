@@ -7,9 +7,6 @@ import { useEffect, useState } from "react";
 const inputClassName =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
-const selectClassName =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
-
 function getVoterField(voterRow, fieldName) {
   const key = Object.keys(voterRow).find(
     (column) => column.toLowerCase() === fieldName.toLowerCase()
@@ -18,9 +15,43 @@ function getVoterField(voterRow, fieldName) {
   return key ? String(voterRow[key] ?? "") : "";
 }
 
+function getSelectedBuildingIds(selectedBuildingIds) {
+  return Object.entries(selectedBuildingIds)
+    .filter(([, isSelected]) => isSelected)
+    .map(([buildingId]) => Number(buildingId));
+}
+
+function parseInsertedId(data) {
+  if (typeof data === "number") {
+    return data;
+  }
+
+  if (typeof data === "string" && data.trim() !== "") {
+    return Number(data);
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const row = data[0];
+
+    if (typeof row === "number") {
+      return row;
+    }
+
+    if (typeof row === "object" && row !== null) {
+      return Number(row.id ?? Object.values(row)[0]);
+    }
+  }
+
+  if (typeof data === "object" && data !== null && data.id != null) {
+    return Number(data.id);
+  }
+
+  return null;
+}
+
 export default function VotersForm() {
   const [buildings, setBuildings] = useState([]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState("0");
+  const [selectedBuildingIds, setSelectedBuildingIds] = useState({});
   const [voterId, setVoterId] = useState("");
   const [selectedGridVoterId, setSelectedGridVoterId] = useState(null);
   const [voter, setVoter] = useState("");
@@ -61,21 +92,13 @@ export default function VotersForm() {
     }
   }
 
-  async function loadVoters(buildingId) {
-    if (buildingId === "0") {
-      setVoters([]);
-      setVotersError(null);
-      return;
-    }
-
+  async function loadVoters() {
     setLoadingVoters(true);
     setVotersError(null);
 
     try {
       const supabase = createClient();
-      const { data, error } = await supabase.rpc("pr_voters", {
-        p_building_id: Number(buildingId),
-      });
+      const { data, error } = await supabase.rpc("pr_voters_all");
 
       if (error) {
         throw error;
@@ -96,39 +119,69 @@ export default function VotersForm() {
 
   useEffect(() => {
     loadBuildings();
+    loadVoters();
   }, []);
 
-  function handleBuildingChange(event) {
-    const buildingId = event.target.value;
-    setSelectedBuildingId(buildingId);
-    setVoterId("");
-    setSelectedGridVoterId(null);
-    setVoter("");
-    setIdNumber("");
-    setSaveError(null);
-    setSaveMessage(null);
-    loadVoters(buildingId);
+  function handleBuildingCheckboxChange(buildingId, checked) {
+    setSelectedBuildingIds((current) => ({
+      ...current,
+      [String(buildingId)]: checked,
+    }));
   }
 
   function handleClear() {
-    setSelectedBuildingId("0");
+    setSelectedBuildingIds({});
     setVoterId("");
     setSelectedGridVoterId(null);
     setVoter("");
     setIdNumber("");
-    setVoters([]);
     setVotersError(null);
     setSaveError(null);
     setSaveMessage(null);
+    loadVoters();
   }
 
-  function handleVoterSelect(voterRow) {
+  async function handleVoterSelect(voterRow) {
     setSaveError(null);
     setSaveMessage(null);
     setSelectedGridVoterId(voterRow.id);
-    setVoterId(getVoterField(voterRow, "id"));
+
+    const selectedVoterId = getVoterField(voterRow, "id");
+
+    setVoterId(selectedVoterId);
     setVoter(getVoterField(voterRow, "name"));
     setIdNumber(getVoterField(voterRow, "idnumber"));
+    setSelectedBuildingIds({});
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("pr_buildings_by_voter", {
+        p_voter_id: Number(selectedVoterId),
+      });
+
+      if (error) {
+        setSaveError(error.message);
+        return;
+      }
+
+      const nextSelectedBuildingIds = {};
+
+      for (const buildingRow of data ?? []) {
+        const buildingId = getVoterField(buildingRow, "id");
+
+        if (buildingId) {
+          nextSelectedBuildingIds[String(buildingId)] = true;
+        }
+      }
+
+      setSelectedBuildingIds(nextSelectedBuildingIds);
+    } catch (loadError) {
+      setSaveError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load buildings for this voter."
+      );
+    }
   }
 
   async function handleSave() {
@@ -139,19 +192,13 @@ export default function VotersForm() {
       return;
     }
 
-    if (selectedBuildingId === "0") {
-      setSaveError("Please select a building.");
-      return;
-    }
-
     setSaving(true);
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.rpc("pi_voters", {
+      const { data, error } = await supabase.rpc("pi_voters", {
         p_idnumber: idNumber,
         p_name: voter.trim(),
-        p_building_id: Number(selectedBuildingId),
       });
 
       if (error) {
@@ -159,11 +206,34 @@ export default function VotersForm() {
         return;
       }
 
-      setVoterId("");
+      const newVoterId = parseInsertedId(data);
+
+      if (newVoterId == null || Number.isNaN(newVoterId)) {
+        setSaveError("Voter was saved, but the new voter id could not be read.");
+        return;
+      }
+
+      setVoterId(String(newVoterId));
+
+      const checkedBuildingIds = getSelectedBuildingIds(selectedBuildingIds);
+
+      for (const buildingId of checkedBuildingIds) {
+        const { error: linkError } = await supabase.rpc("pi_voter_building", {
+          p_voter_id: newVoterId,
+          p_building_id: buildingId,
+        });
+
+        if (linkError) {
+          setSaveError(linkError.message);
+          return;
+        }
+      }
+
       setSelectedGridVoterId(null);
       setVoter("");
       setIdNumber("");
-      await loadVoters(selectedBuildingId);
+      setSelectedBuildingIds({});
+      await loadVoters();
       setSaveMessage("Voter saved successfully.");
     } finally {
       setSaving(false);
@@ -184,11 +254,6 @@ export default function VotersForm() {
       return;
     }
 
-    if (selectedBuildingId === "0") {
-      setSaveError("Please select a building.");
-      return;
-    }
-
     setUpdating(true);
 
     try {
@@ -197,7 +262,6 @@ export default function VotersForm() {
         p_id: Number(voterId),
         p_idnumber: idNumber,
         p_name: voter.trim(),
-        p_building_id: Number(selectedBuildingId),
         p_is_active: true,
       });
 
@@ -206,11 +270,26 @@ export default function VotersForm() {
         return;
       }
 
+      const checkedBuildingIds = getSelectedBuildingIds(selectedBuildingIds);
+
+      for (const buildingId of checkedBuildingIds) {
+        const { error: linkError } = await supabase.rpc("pi_voter_building", {
+          p_voter_id: Number(voterId),
+          p_building_id: buildingId,
+        });
+
+        if (linkError) {
+          setSaveError(linkError.message);
+          return;
+        }
+      }
+
       setVoterId("");
       setSelectedGridVoterId(null);
       setVoter("");
       setIdNumber("");
-      await loadVoters(selectedBuildingId);
+      setSelectedBuildingIds({});
+      await loadVoters();
       setSaveMessage("Voter updated successfully.");
     } finally {
       setUpdating(false);
@@ -243,7 +322,8 @@ export default function VotersForm() {
       setSelectedGridVoterId(null);
       setVoter("");
       setIdNumber("");
-      await loadVoters(selectedBuildingId);
+      setSelectedBuildingIds({});
+      await loadVoters();
       setSaveMessage("Voter deleted successfully.");
     } finally {
       setDeleting(false);
@@ -263,30 +343,6 @@ export default function VotersForm() {
         value={voterId}
         hidden
       />
-
-      <div>
-        <label
-          htmlFor="buildingName"
-          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Building Name
-        </label>
-        <select
-          id="buildingName"
-          name="buildingName"
-          value={selectedBuildingId}
-          onChange={handleBuildingChange}
-          disabled={loadingBuildings}
-          className={selectClassName}
-        >
-          <option value="0">- SELECT -</option>
-          {buildings.map((building) => (
-            <option key={building.id} value={building.id}>
-              {building.name}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div>
         <label
@@ -320,6 +376,42 @@ export default function VotersForm() {
           onChange={(event) => setIdNumber(event.target.value)}
           className={inputClassName}
         />
+      </div>
+
+      <div>
+        <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Buildings
+        </span>
+        {loadingBuildings ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Loading buildings...
+          </p>
+        ) : buildings.length ? (
+          <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+            {buildings.map((building) => (
+              <label
+                key={building.id}
+                className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedBuildingIds[String(building.id)])}
+                  onChange={(event) =>
+                    handleBuildingCheckboxChange(
+                      building.id,
+                      event.target.checked
+                    )
+                  }
+                />
+                <span>{building.name}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            No buildings found.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-4 items-center gap-4">

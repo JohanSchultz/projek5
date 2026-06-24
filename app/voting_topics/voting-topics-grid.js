@@ -1,8 +1,12 @@
-const HIDDEN_COLUMNS = new Set(["id"]);
+const HIDDEN_COLUMNS = new Set(["id", "is_locked"]);
 
 const COLUMN_LABELS = {
   topic_text: "Topic",
 };
+
+const narrowCellClassName = "whitespace-nowrap px-2 py-3 text-zinc-700 dark:text-zinc-300";
+const narrowHeaderClassName =
+  "whitespace-nowrap px-2 py-3 font-medium text-zinc-700 dark:text-zinc-300";
 
 function getColumnLabel(key) {
   return (
@@ -13,6 +17,20 @@ function getColumnLabel(key) {
 
 function isHiddenColumn(key) {
   return HIDDEN_COLUMNS.has(key.toLowerCase());
+}
+
+function getTopicField(topicRow, fieldName) {
+  const key = Object.keys(topicRow).find(
+    (column) => column.toLowerCase() === fieldName.toLowerCase()
+  );
+
+  return key ? topicRow[key] : undefined;
+}
+
+function parseIsLocked(value) {
+  return (
+    value === true || value === "true" || value === 1 || value === "1"
+  );
 }
 
 function getVisibleColumns(topics) {
@@ -32,7 +50,9 @@ export default function VotingTopicsGrid({
   topics,
   loading = false,
   selectedTopicId = null,
+  lockingTopicId = null,
   onSelectTopic,
+  onToggleLock,
 }) {
   if (loading) {
     return (
@@ -66,11 +86,15 @@ export default function VotingTopicsGrid({
                 {column.label}
               </th>
             ))}
+            <th scope="col" className={`${narrowHeaderClassName} w-24`} />
+            <th scope="col" className={`${narrowHeaderClassName} w-24`} />
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-200 bg-white dark:divide-zinc-800 dark:bg-zinc-950">
           {topics.map((topicRow) => {
             const isSelected = selectedTopicId === topicRow.id;
+            const isLocked = parseIsLocked(getTopicField(topicRow, "is_locked"));
+            const isLocking = lockingTopicId === topicRow.id;
 
             return (
               <tr
@@ -91,6 +115,26 @@ export default function VotingTopicsGrid({
                     {topicRow[column.key] ?? ""}
                   </td>
                 ))}
+                <td className={`${narrowCellClassName} w-24 text-xs`}>
+                  {isLocked ? "Locked" : "Unlocked"}
+                </td>
+                <td className={`${narrowCellClassName} w-24`}>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleLock?.(topicRow, !isLocked);
+                    }}
+                    disabled={isLocking || !onToggleLock}
+                    className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-300 bg-white px-2 text-xs font-medium text-zinc-800 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                  >
+                    {isLocking
+                      ? "..."
+                      : isLocked
+                        ? "Unlock"
+                        : "Lock"}
+                  </button>
+                </td>
               </tr>
             );
           })}

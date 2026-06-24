@@ -50,7 +50,7 @@ export default function VotersGrid({
   if (!voters.length) {
     return (
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        No voters found for this building.
+        No voters found.
       </p>
     );
   }

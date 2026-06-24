@@ -46,6 +46,7 @@ export default function VotingTopicsForm() {
   const [saving, setSaving] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [lockingTopicId, setLockingTopicId] = useState(null);
 
   async function loadBuildings() {
     setLoadingBuildings(true);
@@ -183,6 +184,35 @@ export default function VotingTopicsForm() {
     setTopic(getTopicField(topicRow, "topic_text"));
   }
 
+  async function handleToggleLock(topicRow, nextIsLocked) {
+    const topicRowId = getTopicField(topicRow, "id");
+
+    if (!topicRowId || selectedMeetingId === "0") {
+      return;
+    }
+
+    setSaveError(null);
+    setSaveMessage(null);
+    setLockingTopicId(topicRow.id);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("pu_topics_lock", {
+        p_id: Number(topicRowId),
+        p_is_locked: nextIsLocked,
+      });
+
+      if (error) {
+        setSaveError(error.message);
+        return;
+      }
+
+      await loadTopics(selectedMeetingId);
+    } finally {
+      setLockingTopicId(null);
+    }
+  }
+
   async function handleSave() {
     setSaveError(null);
     setSaveMessage(null);
@@ -297,7 +327,7 @@ export default function VotingTopicsForm() {
   }
 
   const isEditing = selectedGridTopicId !== null;
-  const isBusy = saving || updating || deleting;
+  const isBusy = saving || updating || deleting || lockingTopicId !== null;
 
   return (
     <div className="space-y-4">
@@ -443,7 +473,9 @@ export default function VotingTopicsForm() {
         topics={topics}
         loading={loadingTopics}
         selectedTopicId={selectedGridTopicId}
+        lockingTopicId={lockingTopicId}
         onSelectTopic={handleTopicSelect}
+        onToggleLock={handleToggleLock}
       />
 
       {topicsError ? (
