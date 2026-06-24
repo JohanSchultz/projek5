@@ -164,9 +164,12 @@ export default function RegisterForm() {
   function handleMeetingChange(event) {
     const meetingId = event.target.value;
     setSelectedMeetingId(meetingId);
+    setTopics([]);
+    setTopicVotes({});
+    setVotedTopicIds({});
+    setTopicsError(null);
     setVoteError(null);
     setVoteMessage(null);
-    loadTopics(meetingId);
   }
 
   function handleTopicVoteChange(topicId, vote) {
@@ -245,12 +248,9 @@ export default function RegisterForm() {
 
   async function handleLookup() {
     setSearchError(null);
-    setMeetingsError(null);
     setHasSearched(false);
     setVoterId("");
     setUnits([]);
-    setMeetings([]);
-    setSelectedMeetingId("0");
     setTopics([]);
     setTopicVotes({});
     setVotedTopicIds({});
@@ -263,6 +263,11 @@ export default function RegisterForm() {
       return;
     }
 
+    if (selectedMeetingId === "0") {
+      setSearchError("Please select a meeting.");
+      return;
+    }
+
     setLoadingUnits(true);
 
     try {
@@ -270,6 +275,7 @@ export default function RegisterForm() {
       const { data, error } = await supabase.rpc("pr_units_by_idno", {
         p_idnumber: idNumber,
         p_building_id: Number(selectedBuildingId),
+        p_meeting_id: Number(selectedMeetingId),
       });
 
       if (error) {
@@ -277,19 +283,40 @@ export default function RegisterForm() {
       }
 
       const unitRows = data ?? [];
+      const firstRowVoterId =
+        unitRows.length > 0 ? getRowField(unitRows[0], "voter_id") : "";
+
       setUnits(unitRows);
       setHasSearched(true);
+      setVoterId(firstRowVoterId);
 
       if (unitRows.length > 0) {
-        setVoterId(getRowField(unitRows[0], "voter_id"));
-        await loadMeetings(selectedBuildingId);
-      } else {
-        setVoterId("");
+        const meetingId = Number(selectedMeetingId);
+        const depsedById = Number(firstRowVoterId);
+
+        for (const unitRow of unitRows) {
+          const unitId = getRowField(unitRow, "id");
+
+          if (!unitId) {
+            continue;
+          }
+
+          const { error: depsError } = await supabase.rpc("pi_deps", {
+            p_meeting_id: meetingId,
+            p_unit_id: Number(unitId),
+            p_depsed_by_id: depsedById,
+          });
+
+          if (depsError) {
+            throw depsError;
+          }
+        }
+
+        await loadTopics(selectedMeetingId);
       }
     } catch (lookupError) {
       setVoterId("");
       setUnits([]);
-      setMeetings([]);
       setTopics([]);
       setTopicVotes({});
       setVotedTopicIds({});
@@ -306,15 +333,6 @@ export default function RegisterForm() {
 
   return (
     <div className="space-y-4">
-      <input
-        id="voter_id"
-        name="voter_id"
-        type="text"
-        readOnly
-        value={voterId}
-        hidden
-      />
-
       <div>
         <label
           htmlFor="buildingName"
@@ -341,64 +359,6 @@ export default function RegisterForm() {
 
       <div>
         <label
-          htmlFor="idNumber"
-          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Please Enter Your ID Number :
-        </label>
-        <div className="flex items-center gap-3">
-          <input
-            id="idNumber"
-            name="idNumber"
-            type="text"
-            value={idNumber}
-            onChange={(event) => setIdNumber(event.target.value)}
-            className={inputClassName}
-          />
-          <button
-            type="button"
-            onClick={handleLookup}
-            disabled={loadingUnits || loadingMeetings}
-            className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
-          >
-            {">>"}
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <label
-          htmlFor="units"
-          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Units
-        </label>
-        {loadingUnits ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Loading units...
-          </p>
-        ) : hasSearched && units.length === 0 && !searchError ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            No Units Are Associated With The Given ID Number.
-          </p>
-        ) : units.length > 0 ? (
-          <select
-            id="units"
-            name="units"
-            size={6}
-            className={listboxClassName}
-          >
-            {units.map((unitRow, index) => (
-              <option key={unitRow.id ?? index} value={getRowField(unitRow, "name")}>
-                {getRowField(unitRow, "name")}
-              </option>
-            ))}
-          </select>
-        ) : null}
-      </div>
-
-      <div>
-        <label
           htmlFor="meeting"
           className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
@@ -419,6 +379,89 @@ export default function RegisterForm() {
             </option>
           ))}
         </select>
+      </div>
+
+      <div>
+        <label
+          htmlFor="idNumber"
+          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Please Enter Your ID Number :
+        </label>
+        <div className="flex items-center gap-3">
+          <input
+            id="idNumber"
+            name="idNumber"
+            type="text"
+            value={idNumber}
+            onChange={(event) => setIdNumber(event.target.value)}
+            className={inputClassName}
+          />
+          <button
+            type="button"
+            onClick={handleLookup}
+            disabled={loadingUnits}
+            className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+          >
+            {">>"}
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="units"
+          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Units
+        </label>
+        <input
+          id="voter_id"
+          name="voter_id"
+          type="text"
+          readOnly
+          hidden
+          value={voterId}
+        />
+        {loadingUnits ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Loading units...
+          </p>
+        ) : hasSearched && units.length === 0 && !searchError ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            You have no Units which haven't been registered for.
+          </p>
+        ) : units.length > 0 ? (
+          <div
+            id="units"
+            role="listbox"
+            aria-label="Units"
+            className={`${listboxClassName} max-h-[11.25rem] space-y-0.5 overflow-y-auto`}
+          >
+            {units.map((unitRow, index) => {
+              const unitId = getRowField(unitRow, "id");
+              const unitName = getRowField(unitRow, "name");
+
+              return (
+                <div
+                  key={unitId || index}
+                  role="option"
+                  className="flex items-center gap-2 px-1 py-0.5"
+                >
+                  <input
+                    id={`unitId-${unitId || index}`}
+                    name={`unitId-${unitId || index}`}
+                    type="text"
+                    readOnly
+                    hidden
+                    value={unitId}
+                  />
+                  <span>{unitName}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       {loadingTopics ? (

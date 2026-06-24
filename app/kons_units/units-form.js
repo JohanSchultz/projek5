@@ -27,18 +27,14 @@ function isValidWeightInput(value) {
 export default function UnitsForm() {
   const [buildings, setBuildings] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState("0");
-  const [voters, setVoters] = useState([]);
-  const [selectedVoterId, setSelectedVoterId] = useState("0");
   const [unitId, setUnitId] = useState("");
   const [selectedGridUnitId, setSelectedGridUnitId] = useState(null);
   const [unit, setUnit] = useState("");
   const [weight, setWeight] = useState("");
   const [units, setUnits] = useState([]);
   const [loadingBuildings, setLoadingBuildings] = useState(false);
-  const [loadingVoters, setLoadingVoters] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [buildingsError, setBuildingsError] = useState(null);
-  const [votersError, setVotersError] = useState(null);
   const [unitsError, setUnitsError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saveMessage, setSaveMessage] = useState(null);
@@ -68,39 +64,6 @@ export default function UnitsForm() {
       );
     } finally {
       setLoadingBuildings(false);
-    }
-  }
-
-  async function loadVoters(buildingId) {
-    if (buildingId === "0") {
-      setVoters([]);
-      setVotersError(null);
-      return;
-    }
-
-    setLoadingVoters(true);
-    setVotersError(null);
-
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc("pr_voters", {
-        p_building_id: Number(buildingId),
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      setVoters(data ?? []);
-    } catch (loadError) {
-      setVoters([]);
-      setVotersError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Could not load voters."
-      );
-    } finally {
-      setLoadingVoters(false);
     }
   }
 
@@ -142,19 +105,16 @@ export default function UnitsForm() {
   function handleBuildingChange(event) {
     const buildingId = event.target.value;
     setSelectedBuildingId(buildingId);
-    setSelectedVoterId("0");
     setUnitId("");
     setSelectedGridUnitId(null);
     setUnit("");
     setWeight("");
     setSaveError(null);
     setSaveMessage(null);
-    loadVoters(buildingId);
     loadUnits(buildingId);
   }
 
   function handleClear() {
-    setSelectedVoterId("0");
     setUnitId("");
     setSelectedGridUnitId(null);
     setUnit("");
@@ -176,7 +136,6 @@ export default function UnitsForm() {
     setSaveMessage(null);
     setSelectedGridUnitId(unitRow.id);
     setUnitId(getUnitField(unitRow, "id"));
-    setSelectedVoterId(getUnitField(unitRow, "voter_id") || "0");
     setUnit(getUnitField(unitRow, "unit") || getUnitField(unitRow, "name"));
     setWeight(getUnitField(unitRow, "weight"));
   }
@@ -190,11 +149,6 @@ export default function UnitsForm() {
       return;
     }
 
-    if (selectedVoterId === "0") {
-      setSaveError("Please select a voter.");
-      return;
-    }
-
     if (!unit.trim()) {
       return;
     }
@@ -205,7 +159,6 @@ export default function UnitsForm() {
       const supabase = createClient();
       const { error } = await supabase.rpc("pi_munits", {
         p_building_id: Number(selectedBuildingId),
-        p_voter_id: Number(selectedVoterId),
         p_name: unit.trim(),
         p_weight: Number(weight),
       });
@@ -240,11 +193,6 @@ export default function UnitsForm() {
       return;
     }
 
-    if (selectedVoterId === "0") {
-      setSaveError("Please select a voter.");
-      return;
-    }
-
     if (!unit.trim()) {
       setSaveError("Please enter a unit name.");
       return;
@@ -257,7 +205,6 @@ export default function UnitsForm() {
       const { error } = await supabase.rpc("pu_munits", {
         p_id: Number(unitId),
         p_building_id: Number(selectedBuildingId),
-        p_voter_id: Number(selectedVoterId),
         p_name: unit.trim(),
         p_weight: Number(weight),
       });
@@ -344,30 +291,6 @@ export default function UnitsForm() {
           {buildings.map((building) => (
             <option key={building.id} value={building.id}>
               {building.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label
-          htmlFor="voters"
-          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Voters
-        </label>
-        <select
-          id="voters"
-          name="voters"
-          value={selectedVoterId}
-          onChange={(event) => setSelectedVoterId(event.target.value)}
-          disabled={loadingVoters || selectedBuildingId === "0"}
-          className={selectClassName}
-        >
-          <option value="0">- SELECT -</option>
-          {voters.map((voter) => (
-            <option key={voter.id} value={voter.id}>
-              {voter.name}
             </option>
           ))}
         </select>
@@ -463,12 +386,6 @@ export default function UnitsForm() {
       {buildingsError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {buildingsError}
-        </p>
-      ) : null}
-
-      {votersError ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {votersError}
         </p>
       ) : null}
 

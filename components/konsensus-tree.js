@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { filterKonsensusTreeForVoter, isVoterUser } from "@/lib/voter-access";
 
 const KONSENSUS_TREE = [
   {
@@ -11,6 +12,7 @@ const KONSENSUS_TREE = [
       { id: "buildings", label: "Buildings", href: "/kons_buildings" },
       { id: "voters", label: "Voters", href: "/voters" },
       { id: "units", label: "Units", href: "/kons_units" },
+      { id: "unit-owners", label: "Unit owners", href: "/unit_owners" },
       { id: "meetings", label: "Meetings", href: "/meetings" },
       { id: "voting-topics", label: "Voting topics", href: "/voting_topics" },
       { id: "users", label: "Users", href: "/users" },
@@ -124,9 +126,17 @@ function TreeNode({
   );
 }
 
-export default function KonsensusTree() {
+export default function KonsensusTree({ userEmail = null }) {
+  const tree = useMemo(
+    () =>
+      isVoterUser(userEmail)
+        ? filterKonsensusTreeForVoter(KONSENSUS_TREE)
+        : KONSENSUS_TREE,
+    [userEmail]
+  );
+
   const [expandedNodes, setExpandedNodes] = useState(
-    () => new Set(KONSENSUS_TREE.map((node) => node.id))
+    () => new Set(tree.map((node) => node.id))
   );
   const [selectedId, setSelectedId] = useState(null);
 
@@ -145,7 +155,7 @@ export default function KonsensusTree() {
   return (
     <nav aria-label="Konsensus menu">
       <ul className="space-y-1">
-        {KONSENSUS_TREE.map((node) => (
+        {tree.map((node) => (
           <TreeNode
             key={node.id}
             node={node}

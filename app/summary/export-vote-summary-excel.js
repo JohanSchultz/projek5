@@ -1,10 +1,10 @@
 import {
   formatSummaryCellValue,
-  getSummaryColumns,
+  getExcelColumns,
 } from "./summary-grid";
 
 const APTOS_FONT = "Aptos";
-const MERGE_END_COLUMN = "G";
+const MERGE_END_COLUMN = "H";
 const TABLE_START_ROW = 7;
 
 const gridBorder = {
@@ -49,7 +49,7 @@ export async function exportVoteSummaryToExcel({
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Vote Summary");
-  const columns = getSummaryColumns(reportRows);
+  const columns = getExcelColumns(reportRows);
 
   worksheet.mergeCells(`A1:${MERGE_END_COLUMN}1`);
   const titleCell = worksheet.getCell("A1");
@@ -72,8 +72,8 @@ export async function exportVoteSummaryToExcel({
   meetingCell.alignment = { vertical: "middle" };
 
   const headerRow = worksheet.getRow(TABLE_START_ROW);
-  columns.forEach((column, columnIndex) => {
-    const cell = headerRow.getCell(columnIndex + 1);
+  columns.forEach((column) => {
+    const cell = headerRow.getCell(column.excelColumn);
     cell.value = column.label;
     applyTableCellStyle(cell, { bold: true, yellowBackground: true });
   });
@@ -81,8 +81,8 @@ export async function exportVoteSummaryToExcel({
   reportRows.forEach((row, rowIndex) => {
     const excelRow = worksheet.getRow(TABLE_START_ROW + 1 + rowIndex);
 
-    columns.forEach((column, columnIndex) => {
-      const cell = excelRow.getCell(columnIndex + 1);
+    columns.forEach((column) => {
+      const cell = excelRow.getCell(column.excelColumn);
       cell.value = formatSummaryCellValue(
         column.key,
         getRowField(row, column.key)
@@ -91,8 +91,10 @@ export async function exportVoteSummaryToExcel({
     });
   });
 
-  columns.forEach((column, columnIndex) => {
-    const columnLetter = String.fromCharCode("A".charCodeAt(0) + columnIndex);
+  columns.forEach((column) => {
+    const columnLetter = String.fromCharCode(
+      "A".charCodeAt(0) + column.excelColumn - 1
+    );
     const lengths = [
       column.label.length,
       ...reportRows.map((row) =>
@@ -103,7 +105,7 @@ export async function exportVoteSummaryToExcel({
     ];
     const width = Math.min(Math.max(...lengths, 10) + 2, 40);
     worksheet.getColumn(columnLetter).width =
-      columnLetter === "A" ? width * 2 : width;
+      column.key === "topic_text" ? width * 2 : width;
   });
 
   const buffer = await workbook.xlsx.writeBuffer();

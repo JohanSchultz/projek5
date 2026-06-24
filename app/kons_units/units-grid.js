@@ -1,4 +1,10 @@
-const HIDDEN_COLUMNS = new Set(["id", "building_id", "voter_id", "is_active"]);
+const HIDDEN_COLUMNS = new Set([
+  "id",
+  "building_id",
+  "voter_id",
+  "voter",
+  "is_active",
+]);
 
 const COLUMN_LABELS = {
   name: "Unit",

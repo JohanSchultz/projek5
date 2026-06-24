@@ -30,7 +30,7 @@ export default async function KonsensusPage() {
           </form>
         </div>
 
-        <KonsensusTree />
+        <KonsensusTree userEmail={user?.email} />
       </main>
     </div>
   );

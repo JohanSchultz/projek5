@@ -1,9 +1,34 @@
-const VISIBLE_COLUMNS = [
-  { key: "topic_text", label: "Topic" },
-  { key: "yes", label: "Vote" },
-  { key: "votes", label: "Vote-count" },
-  { key: "total_weight", label: "Total weight" },
+const EXCEL_COLUMNS = [
+  { key: "building", label: "Building", excelColumn: 1 },
+  { key: "topic_text", label: "Topic", excelColumn: 2 },
+  { key: "result", label: "Result", excelColumn: 3 },
+  { key: "meeting_date", label: "Meeting Date", excelColumn: 4 },
+  { key: "yes_votes", label: "Yes Votes", excelColumn: 5 },
+  { key: "no_votes", label: "No Votes", excelColumn: 6 },
+  { key: "yes_weight", label: "Yes Weight", excelColumn: 7 },
+  { key: "no_wieght", label: "No Weight", excelColumn: 8 },
 ];
+
+const GRID_COLUMNS = [
+  { key: "topic_text", label: "Topic" },
+  { key: "result", label: "Result" },
+  { key: "yes_votes", label: "Yes Votes" },
+  { key: "no_votes", label: "No Votes" },
+  { key: "yes_weight", label: "Yes Weight" },
+  { key: "no_wieght", label: "No Weight" },
+];
+
+function filterColumnsByRows(columns, rows) {
+  if (!rows.length) {
+    return columns;
+  }
+
+  return columns.filter((column) =>
+    Object.keys(rows[0]).some(
+      (key) => key.toLowerCase() === column.key.toLowerCase()
+    )
+  );
+}
 
 function getRowField(row, fieldName) {
   const key = Object.keys(row).find(
@@ -13,30 +38,20 @@ function getRowField(row, fieldName) {
   return key ? row[key] : undefined;
 }
 
-export function formatSummaryCellValue(key, value) {
-  if (key.toLowerCase() === "yes") {
-    if (value === true || value === "true" || value === 1 || value === "1") {
-      return "Yes";
-    }
-
-    if (value === false || value === "false" || value === 0 || value === "0") {
-      return "No";
-    }
-  }
-
+export function formatSummaryCellValue(_key, value) {
   return value ?? "";
 }
 
 export function getSummaryColumns(rows) {
-  if (!rows.length) {
-    return VISIBLE_COLUMNS;
-  }
+  return filterColumnsByRows(EXCEL_COLUMNS, rows);
+}
 
-  return VISIBLE_COLUMNS.filter((column) =>
-    Object.keys(rows[0]).some(
-      (key) => key.toLowerCase() === column.key.toLowerCase()
-    )
-  );
+export function getExcelColumns(rows) {
+  return filterColumnsByRows(EXCEL_COLUMNS, rows);
+}
+
+export function getGridColumns(rows) {
+  return filterColumnsByRows(GRID_COLUMNS, rows);
 }
 
 function formatCellValue(key, value) {
@@ -44,7 +59,7 @@ function formatCellValue(key, value) {
 }
 
 function getVisibleColumns(rows) {
-  return getSummaryColumns(rows);
+  return getGridColumns(rows);
 }
 
 export default function SummaryGrid({ rows, loading = false }) {
