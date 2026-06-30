@@ -8,6 +8,9 @@ import { useEffect, useState } from "react";
 const selectClassName =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
+const inputClassName =
+  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
+
 const actionButtonClassName =
   "inline-flex h-11 items-center justify-center rounded-lg border border-green-300 bg-green-100 px-5 text-sm font-medium text-zinc-900 transition-colors hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -19,17 +22,50 @@ function getMeetingField(meetingRow, fieldName) {
   return key ? String(meetingRow[key] ?? "") : "";
 }
 
+function formatQuorumValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  const numericValue = Number(value);
+
+  if (Number.isNaN(numericValue)) {
+    return String(value);
+  }
+
+  return numericValue.toFixed(4);
+}
+
+function getRegisteredWeightClassName(value) {
+  if (!value) {
+    return inputClassName;
+  }
+
+  const numericValue = Number(value);
+
+  if (Number.isNaN(numericValue)) {
+    return inputClassName;
+  }
+
+  return numericValue < 0.333
+    ? `${inputClassName} text-red-600 dark:text-red-400`
+    : `${inputClassName} text-blue-600 dark:text-blue-400`;
+}
+
 export default function DetailForm() {
   const [buildings, setBuildings] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState("0");
   const [meetings, setMeetings] = useState([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState("0");
+  const [registeredWeight, setRegisteredWeight] = useState("");
   const [reportRows, setReportRows] = useState([]);
   const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
+  const [loadingQuorum, setLoadingQuorum] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
   const [buildingsError, setBuildingsError] = useState(null);
   const [meetingsError, setMeetingsError] = useState(null);
+  const [quorumError, setQuorumError] = useState(null);
   const [reportError, setReportError] = useState(null);
   const [hasLoadedReport, setHasLoadedReport] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -110,6 +146,39 @@ export default function DetailForm() {
     }
   }
 
+  async function loadRegisteredWeight(meetingId) {
+    if (meetingId === "0") {
+      setRegisteredWeight("");
+      setQuorumError(null);
+      return;
+    }
+
+    setLoadingQuorum(true);
+    setQuorumError(null);
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("pr_rpt_quorum", {
+        p_meeting_id: Number(meetingId),
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setRegisteredWeight(formatQuorumValue(data));
+    } catch (loadError) {
+      setRegisteredWeight("");
+      setQuorumError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load registered weight."
+      );
+    } finally {
+      setLoadingQuorum(false);
+    }
+  }
+
   useEffect(() => {
     loadBuildings();
   }, []);
@@ -118,18 +187,21 @@ export default function DetailForm() {
     const buildingId = event.target.value;
     setSelectedBuildingId(buildingId);
     setSelectedMeetingId("0");
+    setRegisteredWeight("");
+    setQuorumError(null);
     setReportRows([]);
     setReportError(null);
     setHasLoadedReport(false);
     loadMeetings(buildingId);
   }
 
-  function handleMeetingChange(event) {
+  async function handleMeetingChange(event) {
     const meetingId = event.target.value;
     setSelectedMeetingId(meetingId);
     setReportRows([]);
     setReportError(null);
     setHasLoadedReport(false);
+    await loadRegisteredWeight(meetingId);
   }
 
   async function handleShowReport() {
@@ -245,6 +317,27 @@ export default function DetailForm() {
         </select>
       </div>
 
+      <div>
+        <label
+          htmlFor="registeredWeight"
+          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Registered Weight
+        </label>
+        <input
+          id="registeredWeight"
+          name="registeredWeight"
+          type="text"
+          readOnly
+          value={loadingQuorum ? "Loading..." : registeredWeight}
+          className={
+            loadingQuorum
+              ? inputClassName
+              : getRegisteredWeightClassName(registeredWeight)
+          }
+        />
+      </div>
+
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -273,6 +366,12 @@ export default function DetailForm() {
       {meetingsError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {meetingsError}
+        </p>
+      ) : null}
+
+      {quorumError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {quorumError}
         </p>
       ) : null}
 

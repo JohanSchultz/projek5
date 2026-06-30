@@ -42,6 +42,30 @@ export function formatSummaryCellValue(_key, value) {
   return value ?? "";
 }
 
+function formatWeightValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  const numericValue = Number(value);
+
+  if (Number.isNaN(numericValue)) {
+    return value;
+  }
+
+  return numericValue.toFixed(4);
+}
+
+function formatCellValue(key, value) {
+  const keyLower = key.toLowerCase();
+
+  if (keyLower === "yes_weight" || keyLower === "no_wieght") {
+    return formatWeightValue(value);
+  }
+
+  return formatSummaryCellValue(key, value);
+}
+
 export function getSummaryColumns(rows) {
   return filterColumnsByRows(EXCEL_COLUMNS, rows);
 }
@@ -52,10 +76,6 @@ export function getExcelColumns(rows) {
 
 export function getGridColumns(rows) {
   return filterColumnsByRows(GRID_COLUMNS, rows);
-}
-
-function formatCellValue(key, value) {
-  return formatSummaryCellValue(key, value);
 }
 
 function getVisibleColumns(rows) {
