@@ -1,6 +1,9 @@
 "use client";
 
 import DetailGrid from "./detail-grid";
+import QuorumUnitsGrid, {
+  normalizeQuorumUnitNames,
+} from "./quorum-units-grid";
 import { exportVoteDetailsToExcel } from "./export-vote-details-excel";
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
@@ -58,14 +61,17 @@ export default function DetailForm() {
   const [meetings, setMeetings] = useState([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState("0");
   const [registeredWeight, setRegisteredWeight] = useState("");
+  const [quorumUnitNames, setQuorumUnitNames] = useState([]);
   const [reportRows, setReportRows] = useState([]);
   const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [loadingQuorum, setLoadingQuorum] = useState(false);
+  const [loadingQuorumUnits, setLoadingQuorumUnits] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
   const [buildingsError, setBuildingsError] = useState(null);
   const [meetingsError, setMeetingsError] = useState(null);
   const [quorumError, setQuorumError] = useState(null);
+  const [quorumUnitsError, setQuorumUnitsError] = useState(null);
   const [reportError, setReportError] = useState(null);
   const [hasLoadedReport, setHasLoadedReport] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -179,6 +185,39 @@ export default function DetailForm() {
     }
   }
 
+  async function loadQuorumUnits(meetingId) {
+    if (meetingId === "0") {
+      setQuorumUnitNames([]);
+      setQuorumUnitsError(null);
+      return;
+    }
+
+    setLoadingQuorumUnits(true);
+    setQuorumUnitsError(null);
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("pr_rpt_quorum_units", {
+        p_meeting_id: Number(meetingId),
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setQuorumUnitNames(normalizeQuorumUnitNames(data));
+    } catch (loadError) {
+      setQuorumUnitNames([]);
+      setQuorumUnitsError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load quorum units."
+      );
+    } finally {
+      setLoadingQuorumUnits(false);
+    }
+  }
+
   useEffect(() => {
     loadBuildings();
   }, []);
@@ -189,6 +228,8 @@ export default function DetailForm() {
     setSelectedMeetingId("0");
     setRegisteredWeight("");
     setQuorumError(null);
+    setQuorumUnitNames([]);
+    setQuorumUnitsError(null);
     setReportRows([]);
     setReportError(null);
     setHasLoadedReport(false);
@@ -201,7 +242,10 @@ export default function DetailForm() {
     setReportRows([]);
     setReportError(null);
     setHasLoadedReport(false);
-    await loadRegisteredWeight(meetingId);
+    await Promise.all([
+      loadRegisteredWeight(meetingId),
+      loadQuorumUnits(meetingId),
+    ]);
   }
 
   async function handleShowReport() {
@@ -338,6 +382,13 @@ export default function DetailForm() {
         />
       </div>
 
+      {selectedMeetingId !== "0" ? (
+        <QuorumUnitsGrid
+          unitNames={quorumUnitNames}
+          loading={loadingQuorumUnits}
+        />
+      ) : null}
+
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -372,6 +423,12 @@ export default function DetailForm() {
       {quorumError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {quorumError}
+        </p>
+      ) : null}
+
+      {quorumUnitsError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {quorumUnitsError}
         </p>
       ) : null}
 
