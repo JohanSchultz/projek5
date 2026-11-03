@@ -8,7 +8,7 @@
             "type": "chrome",
             "request": "launch",
             "name": "Launch Chrome against localhost",
-            "url": "http://localhost:3000/login",
+            "url": "http://localhost:3011/login",
             "webRoot": "${workspaceFolder}",
             "preLaunchTask": "Start Next.js dev server"
         }

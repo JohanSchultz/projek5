@@ -8,7 +8,11 @@ const MENU_TREE = [
     id: "admin",
     label: "Admin",
     children: [
-      { id: "buildings", label: "Buildings" },
+      {
+        id: "buildings",
+        label: "Buildings",
+        href: "/maintenance-buildings",
+      },
       { id: "technicians", label: "Technicians", href: "/technicians" },
     ],
   },
@@ -116,7 +120,10 @@ function TreeNode({ node, depth = 0, expandedNodes, toggleNode, selectedId, onSe
 
 export default function MenuTree() {
   const [expandedNodes, setExpandedNodes] = useState(
-    () => new Set(MENU_TREE.map((node) => node.id))
+    () =>
+      new Set(
+        MENU_TREE.filter((node) => node.id !== "admin").map((node) => node.id)
+      )
   );
   const [selectedId, setSelectedId] = useState(null);
 
