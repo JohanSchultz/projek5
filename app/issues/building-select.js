@@ -414,6 +414,32 @@ export default function BuildingSelect({ buildings, technicians, statuses, activ
     router.push(`/notes?problemId=${problemId}`);
   }
 
+  function handleCostItems() {
+    const building = buildings.find(
+      (item) => String(item.id) === selectedBuildingId
+    );
+    const area = areas.find((item) => String(item.id) === selectedAreaId);
+    const technician = technicians.find(
+      (item) => String(item.id) === selectedTechnicianId
+    );
+
+    sessionStorage.setItem(
+      "issuesCostItemsContext",
+      JSON.stringify({
+        problemId,
+        building: building?.name ?? "",
+        area: area?.name ?? "",
+        technician: technician?.name ?? "",
+        technicianId: selectedTechnicianId,
+        estimatedHours,
+        reportDate,
+        comments,
+      })
+    );
+
+    router.push(`/cost-items?problemId=${problemId}`);
+  }
+
   async function handleUpdate() {
     setSaveError(null);
     setSaveMessage(null);
@@ -693,39 +719,42 @@ export default function BuildingSelect({ buildings, technicians, statuses, activ
         ) : null}
       </div>
 
-      <div className="grid grid-cols-3 items-center">
-        <div className="justify-self-start">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || updating || isEditing}
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-blue-500/40 bg-blue-500/50 px-5 text-sm font-medium text-blue-950 transition-colors hover:bg-blue-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-400/30 dark:bg-blue-500/30 dark:text-blue-50 dark:hover:bg-blue-500/50"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-        </div>
+      <div className="grid grid-cols-4 items-center gap-4">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || updating || isEditing}
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-blue-500/40 bg-blue-500/50 px-5 text-sm font-medium text-blue-950 transition-colors hover:bg-blue-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-400/30 dark:bg-blue-500/30 dark:text-blue-50 dark:hover:bg-blue-500/50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
 
-        <div className="justify-self-center">
-          <button
-            type="button"
-            onClick={handleUpdate}
-            disabled={saving || updating || !isEditing}
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-orange-500/40 bg-orange-500/50 px-5 text-sm font-medium text-orange-950 transition-colors hover:bg-orange-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-400/30 dark:bg-orange-500/30 dark:text-orange-50 dark:hover:bg-orange-500/50"
-          >
-            {updating ? "Updating..." : "Update"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleUpdate}
+          disabled={saving || updating || !isEditing}
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-orange-500/40 bg-orange-500/50 px-5 text-sm font-medium text-orange-950 transition-colors hover:bg-orange-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-400/30 dark:bg-orange-500/30 dark:text-orange-50 dark:hover:bg-orange-500/50"
+        >
+          {updating ? "Updating..." : "Update"}
+        </button>
 
-        <div className="justify-self-end">
-          <button
-            type="button"
-            onClick={handleNotes}
-            disabled={saving || updating || !isEditing}
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-yellow-500/40 bg-yellow-500/50 px-5 text-sm font-medium text-yellow-950 transition-colors hover:bg-yellow-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-yellow-400/30 dark:bg-yellow-500/30 dark:text-yellow-50 dark:hover:bg-yellow-500/50"
-          >
-            Notes
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleNotes}
+          disabled={saving || updating || !isEditing}
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-yellow-500/40 bg-yellow-500/50 px-5 text-sm font-medium text-yellow-950 transition-colors hover:bg-yellow-500/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-yellow-400/30 dark:bg-yellow-500/30 dark:text-yellow-50 dark:hover:bg-yellow-500/50"
+        >
+          Notes
+        </button>
+
+        <button
+          type="button"
+          onClick={handleCostItems}
+          disabled={saving || updating || !isEditing}
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-green-300 bg-green-100 px-5 text-sm font-medium text-zinc-900 transition-colors hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cost Items
+        </button>
       </div>
 
       {saveMessage ? (
