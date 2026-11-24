@@ -15,6 +15,7 @@ export default function VerjaarsdaeFileDrop() {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
 
   async function processFile(file) {
     if (!file) {
@@ -102,6 +103,46 @@ export default function VerjaarsdaeFileDrop() {
     event.target.value = "";
   }
 
+  async function handleDownloadPowerpoint() {
+    setExportingPptx(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/verjaarsdae/powerpoint");
+
+      if (!response.ok) {
+        let message = "Could not create PowerPoint file.";
+        try {
+          const result = await response.json();
+          if (result.error) {
+            message = result.error;
+          }
+        } catch {
+          // binary or empty body
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Verjaarsdae.pptx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error && exportError.message
+          ? exportError.message
+          : "Could not create PowerPoint file."
+      );
+    } finally {
+      setExportingPptx(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div
@@ -132,6 +173,15 @@ export default function VerjaarsdaeFileDrop() {
           />
         </label>
       </div>
+
+      <button
+        type="button"
+        onClick={handleDownloadPowerpoint}
+        disabled={importing || exportingPptx}
+        className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-green-300 bg-green-100 px-5 text-sm font-medium text-zinc-900 transition-colors hover:bg-green-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-green-800 dark:bg-green-950/50 dark:text-zinc-100 dark:hover:bg-green-900/50"
+      >
+        {exportingPptx ? "Besig om PowerPoint te bou..." : "Kry Powerpoint"}
+      </button>
 
       {fileName ? (
         <p className="text-sm text-zinc-700 dark:text-zinc-300">
