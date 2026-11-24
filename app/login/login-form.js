@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { getPostSignInPath } from "@/lib/menu-routing";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -24,14 +25,13 @@ export default function LoginForm() {
     }
 
     const appNumber = Number(data);
+    const postSignInPath = getPostSignInPath(userEmail, appNumber);
 
-    if (appNumber === 1) {
-      router.push("/menu");
-    } else if (appNumber === 2) {
-      router.push("/konsensus");
-    } else {
+    if (!postSignInPath) {
       throw new Error("Your account is not assigned to a valid application.");
     }
+
+    router.push(postSignInPath);
 
     router.refresh();
   }

@@ -14,6 +14,7 @@ const MENU_TREE = [
         href: "/maintenance-buildings",
       },
       { id: "technicians", label: "Technicians", href: "/technicians" },
+      { id: "users", label: "Users", href: "/user_maint" },
     ],
   },
   {

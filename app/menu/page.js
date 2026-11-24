@@ -1,11 +1,17 @@
 import MenuTree from "@/components/menu-tree";
+import { isRoodiesAdmin } from "@/lib/menu-routing";
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 export default async function MenuPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (user && isRoodiesAdmin(user.email)) {
+    redirect("/menu_roodies");
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-6 py-10 font-sans dark:bg-black">
